@@ -1,0 +1,155 @@
+// == myMod.js ==
+(function(){
+    // ===== Core State =====
+    const state = {
+        theme: "Classic",
+        size: "Mid",
+        title: "Menu",
+        creator: "Unknown",
+        objectPerPage: 5,
+        buttons: [],
+        toggles: [],
+        dropdowns: [],
+        sliders: []
+    };
+
+    // ===== DOM Elements =====
+    let menu, header, content;
+
+    function createMenu() {
+        // Menu container
+        menu = document.createElement("div");
+        menu.id = "modMenu";
+        menu.style.position = "fixed";
+        menu.style.top = "100px";
+        menu.style.left = "100px";
+        menu.style.background = "#1c1c1c";
+        menu.style.border = "2px solid #00ff99";
+        menu.style.borderRadius = "12px";
+        menu.style.zIndex = 9999;
+        menu.style.color = "#fff";
+        menu.style.fontFamily = "Arial";
+        menu.style.padding = "10px";
+        document.body.appendChild(menu);
+
+        // Header
+        header = document.createElement("div");
+        header.innerText = state.title + " - By " + state.creator;
+        header.style.fontWeight = "bold";
+        header.style.cursor = "move";
+        menu.appendChild(header);
+
+        // Content
+        content = document.createElement("div");
+        menu.appendChild(content);
+
+        // Drag
+        let offsetX, offsetY, dragging = false;
+        header.onmousedown = e => { dragging=true; offsetX=e.clientX-menu.offsetLeft; offsetY=e.clientY-menu.offsetTop; }
+        document.onmouseup = ()=> dragging=false;
+        document.onmousemove = e => { if(dragging){ menu.style.left=e.clientX-offsetX+"px"; menu.style.top=e.clientY-offsetY+"px"; }}
+    }
+
+    // ===== Helper Functions =====
+    function applyTheme() {
+        switch(state.theme){
+            case "Blue": menu.style.border="#0099ff"; menu.style.boxShadow="0 0 10px #0099ff"; break;
+            case "Red": menu.style.border="#ff0033"; menu.style.boxShadow="0 0 10px #ff0033"; break;
+            default: menu.style.border="#00ff99"; menu.style.boxShadow="0 0 10px #00ff99"; break;
+        }
+    }
+
+    function applySize(){
+        switch(state.size){
+            case "Small": menu.style.width="200px"; break;
+            case "Mid": menu.style.width="320px"; break;
+            case "Big": menu.style.width="480px"; break;
+        }
+    }
+
+    function buildButtons(){
+        state.buttons.forEach(b=>{
+            const btn = document.createElement("button");
+            btn.innerText = b.text;
+            btn.style.width = "100%";
+            btn.style.margin = "5px 0";
+            btn.onclick = b.callback;
+            content.appendChild(btn);
+        });
+    }
+
+    function buildDropdowns(){
+        state.dropdowns.forEach(dd=>{
+            const wrapper = document.createElement("div");
+            const label = document.createElement("div");
+            label.innerText = dd.text;
+            wrapper.appendChild(label);
+            const select = document.createElement("select");
+            dd.ids.forEach(id => {
+                const option = document.createElement("option");
+                option.value = id;
+                option.innerText = id;
+                select.appendChild(option);
+            });
+            wrapper.appendChild(select);
+            content.appendChild(wrapper);
+        });
+    }
+
+    // ===== Public API =====
+    window.ModAPI = {
+        Theme: {
+            Blue: () => { state.theme="Blue"; },
+            Red: () => { state.theme="Red"; },
+            Classic: () => { state.theme="Classic"; }
+        },
+        SmallSize: ()=> { state.size="Small"; },
+        MidSize: ()=> { state.size="Mid"; },
+        BigSize: ()=> { state.size="Big"; },
+
+        Title: function(title){ state.title=title; return this; },
+        Maker: function(name){ state.creator=name; return this; },
+        ObjectPageing: function(num){ state.objectPerPage=num; return this; },
+
+        Button: function(text){ 
+            return {
+                Callback: function(fn, id){
+                    state.buttons.push({text:text, callback:fn, id:id}); 
+                    return this;
+                }
+            }
+        },
+
+        Toggle: function(text){
+            return {
+                Callback: function(fn){
+                    state.toggles.push({text:text, callback:fn});
+                    return this;
+                }
+            }
+        },
+
+        DropDown: function(text){
+            return {
+                Callback: function(ids){
+                    state.dropdowns.push({text:text, ids:ids});
+                    return this;
+                }
+            }
+        },
+
+        Slider: function(text, min, max, fn){
+            state.sliders.push({text:min,max:max,callback:fn});
+        },
+
+        LoadMenu: function(){
+            createMenu();
+            applyTheme();
+            applySize();
+            buildButtons();
+            buildDropdowns();
+            console.log("Menu Loaded");
+        }
+    }
+
+})();
