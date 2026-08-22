@@ -1189,7 +1189,7 @@
                 .dropdown("Theme").options(Object.keys(THEME_COLORS)).onChange(v => this.setTheme(v))
                 .dropdown("Size").options(["Small", "Mid", "Big", "Huge"]).onChange(v => this.setSize(v))
                 .slider("Corner Radius", 0, 24, 1, 8).action(v => this.setRadius(v))
-                .dropdown("Nav Button Position (BROKEN)").options([
+                .dropdown("Nav Button Position").options([
                     { value: "attached", label: "Attached (bottom, together)" },
                     { value: "sides", label: "Sides (detached, edges)" },
                     { value: "corners", label: "Corners (detached, bottom L/R)" },
