@@ -14,23 +14,22 @@
         borderGlow: "#00ff99",
         accentColor: "#00ff99",
         font: "Arial, sans-serif",
-        radius: 0,          // global corner radius in px
-        navStyle: "attached", // "attached" | "sides" | "corners"
+        radius: 0,         
+        navStyle: "attached", 
 
-        // navigation / category / group system
+       
         rootItems: [],
         categories: [],
-        contextStack: null,     // set below, points at [rootItems]
+        contextStack: null,   
         currentCategory: null,
 
-        // search
         searchEnabled: false,
         searchQuery: "",
 
         // rainbow shit
         rainbow: { title: false, background: false, text: false, border: false },
 
-        // misc
+    
         opacity: 1,
         closeConfirm: false,
         pendingClose: false,
@@ -42,6 +41,7 @@
 
     let menu, header, headerIcons, content, pageInfo, arrows, prevBtn, nextBtn, backBtn, searchBox, creditsEl;
     let sidesLeft, sidesRight, sideBadge, cornerPrev, cornerNext, bottomNote, attachedBadge;
+    let menuResizeObserver = null;
 
  
     function injectStyles() {
@@ -67,6 +67,47 @@
         walk(state.rootItems);
         state.categories.forEach(c => walk(c.items));
         return out;
+    }
+
+    // ---------- Detached nav positioning ----------
+    // sidesLeft/sidesRight/sideBadge/cornerPrev/cornerNext live on document.body,
+    // not inside `menu`, so menu's overflow:hidden can no longer clip them.
+    // This keeps them glued to the menu's current position/size instead.
+    function syncDetachedNav() {
+        if (!menu) return;
+        const rect = menu.getBoundingClientRect();
+
+        Object.assign(sidesLeft.style, {
+            position: "fixed",
+            top: (rect.top + 40) + "px",
+            left: (rect.left - 30) + "px",
+            height: Math.max(20, rect.height - 80) + "px",
+            bottom: "",
+        });
+        Object.assign(sidesRight.style, {
+            position: "fixed",
+            top: (rect.top + 40) + "px",
+            left: (rect.right + 4) + "px",
+            height: Math.max(20, rect.height - 80) + "px",
+            bottom: "",
+        });
+        Object.assign(sideBadge.style, {
+            position: "fixed",
+            top: (rect.top - 14) + "px",
+            left: (rect.left + 12) + "px",
+        });
+        Object.assign(cornerPrev.style, {
+            position: "fixed",
+            top: (rect.bottom + 8) + "px",
+            left: rect.left + "px",
+            bottom: "",
+        });
+        Object.assign(cornerNext.style, {
+            position: "fixed",
+            top: (rect.bottom + 8) + "px",
+            left: (rect.right - cornerNext.offsetWidth) + "px",
+            bottom: "",
+        });
     }
 
     // core classes cuh
@@ -188,52 +229,59 @@
         menu.appendChild(arrows);
 
         // ---------- Sides nav (detached, flush to left/right edges) ----------
+        // NOTE: appended to document.body (not `menu`) so menu's overflow:hidden
+        // can't clip them — they're kept glued to the menu via syncDetachedNav().
         sidesLeft = document.createElement("button");
         sidesLeft.textContent = "\u2039";
         Object.assign(sidesLeft.style, {
-            position: "absolute", top: "40px", bottom: "40px", left: "-30px", width: "26px",
+            position: "fixed", width: "26px",
             background: "#1a1a1a", border: `2px solid ${state.borderGlow}`, borderRadius: "var(--mm-radius)",
             color: "#fff", fontSize: "1.4em", cursor: "pointer", display: "none",
+            zIndex: "99999",
         });
         sidesLeft.onclick = prevPage;
 
         sidesRight = document.createElement("button");
         sidesRight.textContent = "\u203a";
         Object.assign(sidesRight.style, {
-            position: "absolute", top: "40px", bottom: "40px", right: "-30px", width: "26px",
+            position: "fixed", width: "26px",
             background: "#1a1a1a", border: `2px solid ${state.borderGlow}`, borderRadius: "var(--mm-radius)",
             color: "#fff", fontSize: "1.4em", cursor: "pointer", display: "none",
+            zIndex: "99999",
         });
         sidesRight.onclick = nextPage;
 
         sideBadge = document.createElement("div");
         Object.assign(sideBadge.style, {
-            position: "absolute", top: "-14px", left: "12px", background: state.borderGlow, color: "#111",
+            position: "fixed", background: state.borderGlow, color: "#111",
             fontSize: "0.7em", fontWeight: "bold", padding: "2px 8px", borderRadius: "var(--mm-radius)", display: "none",
+            zIndex: "99999",
         });
 
-        menu.append(sidesLeft, sidesRight, sideBadge);
+        document.body.append(sidesLeft, sidesRight, sideBadge);
 
         // ---------- Corners nav (detached, bottom corners) ----------
         cornerPrev = document.createElement("button");
         cornerPrev.textContent = "\u2190";
         Object.assign(cornerPrev.style, {
-            position: "absolute", bottom: "-42px", left: "0", padding: "8px 14px",
+            position: "fixed", padding: "8px 14px",
             background: "#1a1a1a", border: `2px solid ${state.borderGlow}`, borderRadius: "var(--mm-radius)",
             color: "#fff", fontWeight: "bold", cursor: "pointer", display: "none",
+            zIndex: "99999",
         });
         cornerPrev.onclick = prevPage;
 
         cornerNext = document.createElement("button");
         cornerNext.textContent = "\u2192";
         Object.assign(cornerNext.style, {
-            position: "absolute", bottom: "-42px", right: "0", padding: "8px 14px",
+            position: "fixed", padding: "8px 14px",
             background: "#1a1a1a", border: `2px solid ${state.borderGlow}`, borderRadius: "var(--mm-radius)",
             color: "#fff", fontWeight: "bold", cursor: "pointer", display: "none",
+            zIndex: "99999",
         });
         cornerNext.onclick = nextPage;
 
-        menu.append(cornerPrev, cornerNext);
+        document.body.append(cornerPrev, cornerNext);
 
         // ---------- Bottom note (persistent inline notification) ----------
         bottomNote = document.createElement("div");
@@ -254,10 +302,19 @@
             if (!dragging) return;
             menu.style.left = (e.clientX - offsetX) + "px";
             menu.style.top = (e.clientY - offsetY) + "px";
+            syncDetachedNav();
         };
+
+        // keep detached nav glued to the menu across manual resize (makeResizable)
+        // and any other size change (font/theme swaps, content growth, etc.)
+        if (window.ResizeObserver) {
+            menuResizeObserver = new ResizeObserver(() => syncDetachedNav());
+            menuResizeObserver.observe(menu);
+        }
 
         if (state.toggleKey) attachToggleKey();
         updateNavVisibility();
+        syncDetachedNav();
     }
 
     function handleClose() {
@@ -270,7 +327,9 @@
             setTimeout(() => { state.pendingClose = false; closeBtn.textContent = "\u2715"; closeBtn.style.width = "28px"; closeBtn.style.padding = ""; }, 2500);
             return;
         }
+        if (menuResizeObserver) { menuResizeObserver.disconnect(); menuResizeObserver = null; }
         menu.remove();
+        [sidesLeft, sidesRight, sideBadge, cornerPrev, cornerNext].forEach(el => el && el.remove());
         menu = null;
     }
 
@@ -295,6 +354,7 @@
         sideBadge.style.display = showSides ? "" : "none";
         cornerPrev.style.display = showCorners ? "" : "none";
         cornerNext.style.display = showCorners ? "" : "none";
+        if (showSides || showCorners) syncDetachedNav();
     }
 
   
@@ -320,6 +380,7 @@
     function applySize() {
         const sizes = { Small: "260px", Mid: "360px", Big: "480px", Huge: "620px" };
         if (menu) menu.style.width = sizes[state.size] || "360px";
+        syncDetachedNav();
     }
 
     function applyFont() { if (menu) menu.style.fontFamily = state.font; }
@@ -334,6 +395,7 @@
         if (bottomNote) bottomNote.style.display = state.minimized ? "none" : bottomNote.style.display;
         if (creditsEl) creditsEl.style.display = d;
         updateNavVisibility();
+        syncDetachedNav();
     }
 
 
@@ -385,6 +447,10 @@
             b.style.opacity = b.disabled ? "0.4" : "1";
             b.style.cursor = b.disabled ? "not-allowed" : "pointer";
         });
+
+        // content height (and thus menu height) can change per page/category —
+        // keep the detached nav glued to the new bounds.
+        syncDetachedNav();
     }
 
     function styledBox(el) {
@@ -836,7 +902,14 @@
         toggleKeyHandler = e => {
             if (e.key === state.toggleKey || e.code === state.toggleKey) {
                 if (!menu) return;
-                menu.style.display = menu.style.display === "none" ? "" : "none";
+                const nowHidden = menu.style.display === "none" ? "" : "none";
+                menu.style.display = nowHidden;
+                [sidesLeft, sidesRight, sideBadge, cornerPrev, cornerNext].forEach(el => {
+                    if (!el) return;
+                    if (nowHidden === "none") { el.style.display = "none"; }
+                    else { updateNavVisibility(); }
+                });
+                if (nowHidden === "") syncDetachedNav();
             }
         };
         document.addEventListener("keydown", toggleKeyHandler);
@@ -1087,27 +1160,22 @@
 
         show() {
             if (!menu) { createMenu(); applyTheme(); applySize(); applyFont(); applyRadius(); applyRainbowFlags(); }
+            menu.style.display = "";
             buildPage();
             return this;
         },
-        hide() { if (menu) menu.style.display = "none"; return this; },
-        destroy() { if (menu) { menu.remove(); menu = null; } return this; },
+        hide() {
+            if (menu) menu.style.display = "none";
+            [sidesLeft, sidesRight, sideBadge, cornerPrev, cornerNext].forEach(el => { if (el) el.style.display = "none"; });
+            return this;
+        },
+        destroy() {
+            if (menuResizeObserver) { menuResizeObserver.disconnect(); menuResizeObserver = null; }
+            if (menu) { menu.remove(); menu = null; }
+            [sidesLeft, sidesRight, sideBadge, cornerPrev, cornerNext].forEach(el => el && el.remove());
+            return this;
+        },
 
-   
-		
-
-		// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-				// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-						// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-								// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-										// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-												// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-														// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-																// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-																		// Test Menu _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+( _)&*_+(&^%^&)+(_(*_&)(%(&*^&)*+_++&)(%&&*(*^+_()+_&)^()&(*+(
-																		
-
-		
         demo() {
             return this
                 .button("Button", "").action(() => console.log("Button"))
